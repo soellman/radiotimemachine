@@ -5,27 +5,36 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 )
 
 const ChunkSeconds = 20
 
 func main() {
 
+	backend := RedisDevice{}
+	presets, err := PresetsWithBackend(backend)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	r := Radio{
 		TapeDeck: &TapeDeck{
-			device: RedisDevice{},
+			device: backend,
 		},
+		Presets: presets,
 	}
 
-	loc, _ := time.LoadLocation("America/New_York")
-	s := &Station{
-		Name:     "wamc",
-		Url:      "http://playerservices.streamtheworld.com/api/livestream-redirect/WAMCHD2.mp3",
-		Location: loc,
-	}
+	r.On()
 
-	r.AddStation(s)
+	//s := &Station{
+	//	Name:     "wamc",
+	//	Url:      "http://playerservices.streamtheworld.com/api/livestream-redirect/WAMCHD2.mp3",
+	//	Location: "America/New_York",
+	//}
+
+	// ignore error
+	//_ = s.Init()
+	//r.AddStation(s)
 
 	sigs := make(chan os.Signal, 1)
 	done := make(chan bool, 1)

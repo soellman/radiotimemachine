@@ -5,8 +5,6 @@ import (
 	"time"
 
 	"golang.org/x/net/context"
-
-	"github.com/go-redis/redis"
 )
 
 const TTL = time.Duration(24 * time.Hour)
@@ -39,7 +37,7 @@ type Incrementer struct {
 func (i *Incrementer) Key() string {
 	ts := i.t.Format(time.RFC3339)
 	i.t = i.t.Add(time.Duration(time.Second * ChunkSeconds))
-	return fmt.Sprintf("%s-%s", i.name, ts)
+	return fmt.Sprintf("chunk-%s-%s", i.name, ts)
 }
 
 type RecordingDevice interface {
@@ -78,57 +76,4 @@ type TapePlayer interface {
 // TapeRecorder exposes a simple interface to write a chunk
 type TapeRecorder interface {
 	Write(data []byte) error
-}
-
-// A RedisDevice implements RecordingDevice and connects to redis
-// with a 24h expiration on stored entries
-type RedisDevice struct{}
-
-// Implements RecordedTape
-func (rd RedisDevice) RecordedTape(i Incrementer) *RecordedTape {
-	client := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
-		Password: "", // no password set
-		DB:       0,  // use default DB
-	})
-
-	return &RecordedTape{
-		tape: &RedisTape{
-			i:      i,
-			client: client,
-		},
-	}
-}
-
-func (rd RedisDevice) BlankTape(i Incrementer) *BlankTape {
-	client := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
-		Password: "", // no password set
-		DB:       0,  // use default DB
-	})
-
-	return &BlankTape{
-		tape: &RedisTape{
-			i:      i,
-			client: client,
-		},
-	}
-}
-
-// A RedisTape implements BlankTape and RecordedTape
-// and stores entries with an expiration according to TTL
-type RedisTape struct {
-	i      Incrementer
-	client *redis.Client
-}
-
-func (rt *RedisTape) Write(data []byte) error {
-	if err := rt.client.Set(rt.i.Key(), data, TTL); err != nil {
-		return err.Err()
-	}
-	return nil
-}
-
-func (rt *RedisTape) Read() ([]byte, error) {
-	return rt.client.Get(rt.i.Key()).Bytes()
 }
