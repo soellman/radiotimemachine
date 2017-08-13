@@ -1,11 +1,37 @@
 package main
 
 import (
+	"errors"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/tcolgate/mp3"
 )
+
+// PATH FUNCTIONS
+
+// StreamPath returns the path components
+type streamPath struct {
+	stationName      string
+	listenerLocation *time.Location
+}
+
+func ParsePath(path string) (*streamPath, error) {
+	pieces := strings.Split(path, "/")
+	if len(pieces) != 3 {
+		return nil, errors.New("incorrect number of path elements")
+	}
+
+	name := pieces[0]
+	locName := pieces[1] + "/" + pieces[2]
+	loc, err := time.LoadLocation(locName)
+	if err != nil {
+		return nil, err
+	}
+
+	return &streamPath{stationName: name, listenerLocation: loc}, nil
+}
 
 // TIME FUNCTIONS
 

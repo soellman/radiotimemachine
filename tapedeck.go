@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"time"
 
 	"golang.org/x/net/context"
@@ -11,38 +10,34 @@ const TTL = time.Duration(24 * time.Hour)
 
 // A TapeDeck is the backend that records and plays tapes
 type TapeDeck struct {
-	ctx    context.Context
-	device RecordingDevice
+	ctx     context.Context
+	backend TapeBackend
 }
 
-// TODO: FIXME calc time from location
 func (deck *TapeDeck) BlankTape(name string, cue time.Time) *BlankTape {
-	i := Incrementer{name: name, t: cue}
-	return deck.device.BlankTape(i)
+	return deck.backend.BlankTape(name, Incrementer{cue})
 }
 
 func (deck *TapeDeck) RecordedTape(name string, cue time.Time) *RecordedTape {
-	i := Incrementer{name: name, t: cue}
-	return deck.device.RecordedTape(i)
+	return deck.backend.RecordedTape(name, Incrementer{cue})
 }
 
 // Incrementer increments time
 // TODO: add duration here
 type Incrementer struct {
-	name string
-	t    time.Time
+	t time.Time
 }
 
 // TODO: use format that doesn't include offset?
 func (i *Incrementer) Key() string {
 	ts := i.t.Format(time.RFC3339)
 	i.t = i.t.Add(time.Duration(time.Second * ChunkSeconds))
-	return fmt.Sprintf("chunk-%s-%s", i.name, ts)
+	return ts
 }
 
-type RecordingDevice interface {
-	BlankTape(i Incrementer) *BlankTape
-	RecordedTape(i Incrementer) *RecordedTape
+type TapeBackend interface {
+	BlankTape(name string, i Incrementer) *BlankTape
+	RecordedTape(name string, i Incrementer) *RecordedTape
 }
 
 // A RecordedTape plays chunks from the datastore via the Reader interface

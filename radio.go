@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -61,8 +62,12 @@ func (s *Station) CurrentTime() time.Time {
 // with the hours set to the current hours in the specified location
 // and truncated to the chunkduration boundary
 func (s *Station) ListenerTime(loc *time.Location) time.Time {
-
-	return time.Now()
+	now := s.CurrentTime()
+	distance := s.ListenerDistance(loc)
+	if distance >= 0 {
+		distance -= 24 * 60
+	}
+	return now.Add(time.Duration(distance) * time.Minute)
 }
 
 // ListenerDistance returns the number of minutes offset
@@ -91,13 +96,18 @@ type Dialer interface {
 // A Radio manages all the stations and recordings
 type Radio struct {
 	ctx      context.Context
-	Stations []*Station
+	Stations map[string]*Station
 	Presets  *Presets
 	TapeDeck *TapeDeck
 }
 
-// Record tunes into a station and records to a blank tape
-func (r *Radio) Record(s *Station) error {
+// TODO:
+//func NewRadio(backend Backend, options RadioOptions) (*Radio, error) {
+
+//}
+
+// Listen tunes into a station and records to a blank tape
+func (r *Radio) Listen(s *Station) error {
 	stream, err := s.Tune(r.ctx)
 	if err != nil {
 		log.Printf("error recording station %s: %v", s.Name, err)
@@ -126,20 +136,121 @@ func (r *Radio) On() {
 			log.Printf("error loading preset %s: %v", s.Name, err)
 			continue
 		}
-		r.Stations = append(r.Stations, s)
+		r.Stations[s.Name] = s
 		log.Printf("loaded preset %s", s.Name)
 	}
 
 	for _, s := range r.Stations {
-		r.Record(s)
+		r.Listen(s)
+	}
+
+	http.HandleFunc("/", r.Broadcast)
+	go http.ListenAndServe(":8080", nil)
+}
+
+// Broadcast listens for requests and streams a station
+func (r *Radio) Broadcast(rw http.ResponseWriter, req *http.Request) {
+	sp, err := ParsePath(req.URL.Path[1:])
+	if err != nil {
+		http.NotFound(rw, req)
+		fmt.Fprintln(rw, "want path: /<station>/<location e.g. America/New_York>")
+		return
+	}
+
+	s, ok := r.Stations[sp.stationName]
+	if !ok {
+		http.NotFound(rw, req)
+		return
+	}
+
+	// TODO: get relative time
+	listenerTime := s.CurrentTime().Add(-1 * time.Minute)
+
+	tape := r.TapeDeck.RecordedTape(s.Name, listenerTime)
+
+	log.Printf("Streaming %s to %s\n", s.Name, req.RemoteAddr)
+
+	// thanks http://engineering.pivotal.io/post/http-trailers/
+	trailerKey := http.CanonicalHeaderKey("X-Streaming-Error")
+
+	// NOTE: We set this in the Header because of the HTTP spec
+	// http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.40
+	// Even though we cannot test it, because the `net/http.Get()` strips
+	// "Trailer" out of the Header
+	rw.Header().Set("Trailer", trailerKey)
+
+	if err := r.Stream(tape, rw); err != nil {
+		rw.(http.Flusher).Flush()
+		trailers := http.Header{}
+		trailers.Set(trailerKey, err.Error())
+
+		rw.(http.Flusher).Flush()
+		conn, buf, _ := rw.(http.Hijacker).Hijack()
+
+		buf.WriteString("0\r\n") // eof
+		trailers.Write(buf)
+
+		buf.WriteString("\r\n") // end of trailers
+		buf.Flush()
+		conn.Close()
+	}
+}
+
+var (
+	errStreamCancelled  = errors.New("stream cancelled")
+	errStreamReadError  = errors.New("backend error")
+	errStreamWriteError = errors.New("client error")
+)
+
+func (r *Radio) Stream(t *RecordedTape, rw http.ResponseWriter) error {
+	pushchunk := func() error {
+		chunk, err := t.tape.Read()
+		if err != nil {
+			log.Printf("read error from tape: %+v\n", t)
+			return errStreamReadError
+		}
+		if _, err := rw.Write(chunk); err != nil {
+			log.Printf("write error to client: %+v\n", rw)
+			return errStreamWriteError
+		}
+		rw.(http.Flusher).Flush()
+		return nil
+	}
+
+	// push some chunks to the client's buffer
+	for i := 0; i < BufferChunks; i++ {
+		if err := pushchunk(); err != nil {
+			return err
+		}
+	}
+
+	ticker := time.NewTicker(time.Second * time.Duration(ChunkSeconds))
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-r.ctx.Done():
+			log.Printf("cancelling stream\n")
+			return errStreamCancelled
+		case <-ticker.C:
+			if err := pushchunk(); err != nil {
+				return err
+			}
+		}
 	}
 }
 
 // TODO: where should errors go?
 func (r *Radio) AddStation(s *Station) {
-	r.Stations = append(r.Stations, s)
+	r.Stations[s.Name] = s
 	r.Presets.Add(s)
-	r.Record(s)
+	r.Listen(s)
+}
+
+type Backend interface {
+	Ping() error
+	PresetBackend
+	TapeBackend
 }
 
 // ChunkPump pumps reads from the reader to the writer

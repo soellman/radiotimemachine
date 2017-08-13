@@ -1,10 +1,14 @@
 package main
 
-import "github.com/go-redis/redis"
+import (
+	"fmt"
 
-// A RedisDevice implements RecordingDevice and connects to redis
+	"github.com/go-redis/redis"
+)
+
+// A RedisBackend implements Backend and connects to redis
 // with a 24h expiration on stored entries
-type RedisDevice struct{}
+type RedisBackend struct{}
 
 func NewRedisClient() *redis.Client {
 	return redis.NewClient(&redis.Options{
@@ -14,10 +18,17 @@ func NewRedisClient() *redis.Client {
 	})
 }
 
+// Implements Backend
+func (b RedisBackend) Ping() error {
+	_, err := NewRedisClient().Ping().Result()
+	return err
+}
+
 // Implements RecordedTape
-func (rd RedisDevice) RecordedTape(i Incrementer) *RecordedTape {
+func (b RedisBackend) RecordedTape(name string, i Incrementer) *RecordedTape {
 	return &RecordedTape{
 		tape: &RedisTape{
+			name:   name,
 			i:      i,
 			client: NewRedisClient(),
 		},
@@ -25,9 +36,10 @@ func (rd RedisDevice) RecordedTape(i Incrementer) *RecordedTape {
 }
 
 // Implements BlankTape
-func (rd RedisDevice) BlankTape(i Incrementer) *BlankTape {
+func (b RedisBackend) BlankTape(name string, i Incrementer) *BlankTape {
 	return &BlankTape{
 		tape: &RedisTape{
+			name:   name,
 			i:      i,
 			client: NewRedisClient(),
 		},
@@ -37,30 +49,33 @@ func (rd RedisDevice) BlankTape(i Incrementer) *BlankTape {
 // A RedisTape implements BlankTape and RecordedTape
 // and stores entries with an expiration according to TTL
 type RedisTape struct {
+	name   string
 	i      Incrementer
 	client *redis.Client
 }
 
-func (rt *RedisTape) Write(data []byte) error {
-	if err := rt.client.Set(rt.i.Key(), data, TTL); err != nil {
+func (t *RedisTape) Write(data []byte) error {
+	k := fmt.Sprintf("chunk:%s:%s", t.name, t.i.Key())
+	if err := t.client.Set(k, data, TTL); err != nil {
 		return err.Err()
 	}
 	return nil
 }
 
-func (rt *RedisTape) Read() ([]byte, error) {
-	return rt.client.Get(rt.i.Key()).Bytes()
+func (t *RedisTape) Read() ([]byte, error) {
+	k := fmt.Sprintf("chunk:%s:%s", t.name, t.i.Key())
+	return t.client.Get(k).Bytes()
 }
 
 // Implements PresetBackend
-func (rd RedisDevice) Read(key string) (data []byte, err error) {
-	return NewRedisClient().Get(key).Bytes()
+func (b RedisBackend) ReadPreset(name string) (data []byte, err error) {
+	k := fmt.Sprintf("preset:%s", name)
+	return NewRedisClient().Get(k).Bytes()
 }
 
-// TODO: key should be injected
-func (rd RedisDevice) ReadAll() (data [][]byte, err error) {
+func (b RedisBackend) ReadAllPresets() (data [][]byte, err error) {
 	client := NewRedisClient()
-	keys, e := client.Keys("preset-*").Result()
+	keys, e := client.Keys("preset:*").Result()
 	if e != nil {
 		err = e
 		return
@@ -78,8 +93,9 @@ func (rd RedisDevice) ReadAll() (data [][]byte, err error) {
 	return
 }
 
-func (rd RedisDevice) Write(key string, data []byte) error {
-	if err := NewRedisClient().Set(key, data, 0); err != nil {
+func (b RedisBackend) WritePreset(name string, data []byte) error {
+	k := fmt.Sprintf("preset:%s", name)
+	if err := NewRedisClient().Set(k, data, 0); err != nil {
 		return err.Err()
 	}
 	return nil

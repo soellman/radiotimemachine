@@ -29,19 +29,19 @@ type testPresetBackend struct {
 	data map[string][]byte
 }
 
-func (b *testPresetBackend) Read(key string) (data []byte, err error) {
+func (b *testPresetBackend) ReadPreset(name string) (data []byte, err error) {
 	return []byte{}, nil
 }
 
-func (b *testPresetBackend) ReadAll() (data [][]byte, err error) {
+func (b *testPresetBackend) ReadAllPresets() (data [][]byte, err error) {
 	for _, d := range b.data {
 		data = append(data, d)
 	}
 	return
 }
 
-func (b *testPresetBackend) Write(key string, data []byte) error {
-	b.data[key] = data
+func (b *testPresetBackend) WritePreset(name string, data []byte) error {
+	b.data[name] = data
 	return nil
 }
 
