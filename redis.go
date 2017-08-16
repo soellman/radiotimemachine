@@ -12,7 +12,7 @@ type RedisBackend struct{}
 
 func NewRedisClient() *redis.Client {
 	return redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
+		Addr:     dbhost + ":" + dbport,
 		Password: "", // no password set
 		DB:       0,  // use default DB
 	})

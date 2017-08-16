@@ -9,13 +9,21 @@ import (
 	"time"
 )
 
-const ChunkSeconds = 20
-const BufferChunks = 2
+const (
+	ChunkSeconds = 20
+	BufferChunks = 2
+)
+
+var (
+	dbhost string = "localhost"
+	dbport string = "8888"
+)
 
 func main() {
 	var backend Backend
 	//backend = &EtcdBackend{}
-	backend = &RedisBackend{}
+	//backend = &RedisBackend{}
+	backend = &SSDBBackend{}
 
 	if err := backend.Init(); err != nil {
 		log.Fatalf("cannot init backend: %v\n", err)
@@ -33,7 +41,7 @@ func main() {
 		},
 		Options: RadioOptions{
 			Broadcast: true,
-			Listen:    false,
+			Listen:    true,
 		},
 	}
 	r.On()
