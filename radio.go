@@ -93,12 +93,19 @@ type Dialer interface {
 	Tune(ctx context.Context) (s Stream, err error)
 }
 
+// RadioOptions enables some radio features
+type RadioOptions struct {
+	Broadcast bool
+	Listen    bool
+}
+
 // A Radio manages all the stations and recordings
 type Radio struct {
 	ctx      context.Context
 	Stations map[string]*Station
 	Presets  *Presets
 	TapeDeck *TapeDeck
+	Options  RadioOptions
 }
 
 // TODO:
@@ -125,27 +132,34 @@ func (r *Radio) Listen(s *Station) error {
 
 // Turn on the radio and start recording presets
 func (r *Radio) On() {
-	stations, err := r.Presets.Load()
-	if err != nil {
-		log.Printf("error loading presets: %v", err)
-	}
-
-	for _, s := range stations {
-		err = s.Init()
+	if r.Options.Listen {
+		log.Println("Loading presets")
+		stations, err := r.Presets.Load()
 		if err != nil {
-			log.Printf("error loading preset %s: %v", s.Name, err)
-			continue
+			log.Printf("error loading presets: %v", err)
 		}
-		r.Stations[s.Name] = s
-		log.Printf("loaded preset %s", s.Name)
+
+		for _, s := range stations {
+			err = s.Init()
+			if err != nil {
+				log.Printf("error loading preset %s: %v", s.Name, err)
+				continue
+			}
+			r.Stations[s.Name] = s
+			log.Printf("loaded preset %s", s.Name)
+		}
+
+		for _, s := range r.Stations {
+			r.Listen(s)
+		}
 	}
 
-	for _, s := range r.Stations {
-		r.Listen(s)
+	if r.Options.Broadcast {
+		log.Println("Starting broadcast")
+		http.HandleFunc("/", r.Broadcast)
+		// TODO: graceful
+		go http.ListenAndServe(":8080", nil)
 	}
-
-	http.HandleFunc("/", r.Broadcast)
-	go http.ListenAndServe(":8080", nil)
 }
 
 // Broadcast listens for requests and streams a station
@@ -157,15 +171,13 @@ func (r *Radio) Broadcast(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	s, ok := r.Stations[sp.stationName]
-	if !ok {
+	s, err := r.Presets.Lookup(sp.stationName)
+	if err != nil {
 		http.NotFound(rw, req)
 		return
 	}
 
-	// TODO: get relative time
-	listenerTime := s.CurrentTime().Add(-1 * time.Minute)
-
+	listenerTime := s.ListenerTime(sp.listenerLocation)
 	tape := r.TapeDeck.RecordedTape(s.Name, listenerTime)
 
 	log.Printf("Streaming %s to %s\n", s.Name, req.RemoteAddr)
@@ -206,11 +218,11 @@ func (r *Radio) Stream(t *RecordedTape, rw http.ResponseWriter) error {
 	pushchunk := func() error {
 		chunk, err := t.tape.Read()
 		if err != nil {
-			log.Printf("read error from tape: %+v\n", t)
+			log.Printf("read error from tape: %+v\n", err)
 			return errStreamReadError
 		}
 		if _, err := rw.Write(chunk); err != nil {
-			log.Printf("write error to client: %+v\n", rw)
+			log.Printf("write error to client: %+v\n", err)
 			return errStreamWriteError
 		}
 		rw.(http.Flusher).Flush()
@@ -248,7 +260,7 @@ func (r *Radio) AddStation(s *Station) {
 }
 
 type Backend interface {
-	Ping() error
+	Init() error
 	PresetBackend
 	TapeBackend
 }

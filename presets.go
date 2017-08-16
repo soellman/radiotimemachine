@@ -51,3 +51,23 @@ func (p *Presets) Add(s *Station) error {
 
 	return nil
 }
+
+// Lookup returns an initialized Station from the backend or an error
+func (p *Presets) Lookup(name string) (*Station, error) {
+	data, err := p.backend.ReadPreset(name)
+	if err != nil {
+		return nil, errors.Wrap(err, "station not found")
+	}
+
+	s := &Station{}
+	err = json.Unmarshal(data, s)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal station")
+	}
+
+	if err = s.Init(); err != nil {
+		return nil, errors.Wrap(err, "failed to initialize station")
+	}
+
+	return s, nil
+}

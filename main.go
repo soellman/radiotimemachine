@@ -13,12 +13,10 @@ const ChunkSeconds = 20
 const BufferChunks = 2
 
 func main() {
-	//backend := &RedisBackend{}
-	//if err := backend.Ping(); err != nil {
-	//	log.Fatalf("cannot init backend: %v\n", err)
-	//}
+	var backend Backend
+	//backend = &EtcdBackend{}
+	backend = &RedisBackend{}
 
-	backend := &EtcdBackend{}
 	if err := backend.Init(); err != nil {
 		log.Fatalf("cannot init backend: %v\n", err)
 	}
@@ -33,13 +31,17 @@ func main() {
 		Presets: &Presets{
 			backend: backend,
 		},
+		Options: RadioOptions{
+			Broadcast: true,
+			Listen:    false,
+		},
 	}
 	r.On()
 
 	if false {
 		s := &Station{
 			Name:     "wamc",
-			Url:      "http://playerservices.streamtheworld.com/api/livestream-redirect/WAMCHD2.mp3",
+			Url:      "http://playerservices.streamtheworld.com/api/livestream-redirect/WAMCFM.mp3",
 			Location: "America/New_York",
 		}
 
@@ -57,7 +59,7 @@ func main() {
 		sig := <-sigs
 		log.Printf("Received signal %s", sig)
 		cancel()
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond) // leave time for cancellation
 		done <- true
 	}()
 

@@ -19,7 +19,7 @@ func NewRedisClient() *redis.Client {
 }
 
 // Implements Backend
-func (b RedisBackend) Ping() error {
+func (b RedisBackend) Init() error {
 	_, err := NewRedisClient().Ping().Result()
 	return err
 }
