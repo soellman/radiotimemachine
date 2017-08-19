@@ -102,16 +102,12 @@ type RadioOptions struct {
 // A Radio manages all the stations and recordings
 type Radio struct {
 	ctx      context.Context
+	Address  string
 	Stations map[string]*Station
 	Presets  *Presets
 	TapeDeck *TapeDeck
 	Options  RadioOptions
 }
-
-// TODO:
-//func NewRadio(backend Backend, options RadioOptions) (*Radio, error) {
-
-//}
 
 // Listen tunes into a station and records to a blank tape
 func (r *Radio) Listen(s *Station) error {
@@ -146,7 +142,6 @@ func (r *Radio) On() {
 				continue
 			}
 			r.Stations[s.Name] = s
-			log.Printf("loaded preset %s", s.Name)
 		}
 
 		for _, s := range r.Stations {
@@ -158,7 +153,7 @@ func (r *Radio) On() {
 		log.Println("Starting broadcast")
 		http.HandleFunc("/", r.Broadcast)
 		// TODO: graceful
-		go http.ListenAndServe(":8080", nil)
+		go http.ListenAndServe(r.Address, nil)
 	}
 }
 
@@ -260,7 +255,7 @@ func (r *Radio) AddStation(s *Station) {
 }
 
 type Backend interface {
-	Init() error
+	Init(host string, port int) error
 	PresetBackend
 	TapeBackend
 }

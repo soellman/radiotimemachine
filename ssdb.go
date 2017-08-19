@@ -7,54 +7,48 @@ import (
 	"github.com/go-redis/redis"
 )
 
-// A SSDBBackend implements Backend and connects to redis
-// with a 24h expiration on stored entries
-type SSDBBackend struct{}
+// A SSDBBackend implements Backend and connects to ssdb
+// ssdb is basically redis, but doesn't support KEYS <wildcard>
+type SSDBBackend struct {
+	host  string
+	port  int
+	redis *RedisBackend
+}
 
-func NewSSDBClient() *redis.Client {
+func (b SSDBBackend) NewClient() *redis.Client {
 	return redis.NewClient(&redis.Options{
-		Addr:     dbhost + ":" + dbport,
+		Addr:     fmt.Sprintf("%s:%d", b.host, b.port),
 		Password: "", // no password set
 		DB:       0,  // use default DB
 	})
 }
 
 // Implements Backend
-func (b SSDBBackend) Init() error {
-	_, err := NewRedisClient().Ping().Result()
-	return err
+func (b *SSDBBackend) Init(host string, port int) error {
+	b.host = host
+	b.port = port
+	b.redis = &RedisBackend{}
+	return b.redis.Init(host, port)
 }
 
 // Implements RecordedTape
 func (b SSDBBackend) RecordedTape(name string, i Incrementer) *RecordedTape {
-	return &RecordedTape{
-		tape: &RedisTape{
-			name:   name,
-			i:      i,
-			client: NewRedisClient(),
-		},
-	}
+	return b.redis.RecordedTape(name, i)
 }
 
 // Implements BlankTape
 func (b SSDBBackend) BlankTape(name string, i Incrementer) *BlankTape {
-	return &BlankTape{
-		tape: &RedisTape{
-			name:   name,
-			i:      i,
-			client: NewRedisClient(),
-		},
-	}
+	return b.redis.BlankTape(name, i)
 }
 
 // Implements PresetBackend
 func (b SSDBBackend) ReadPreset(name string) (data []byte, err error) {
-	k := fmt.Sprintf("preset:%s", name)
-	return NewRedisClient().Get(k).Bytes()
+	return b.redis.ReadPreset(name)
 }
 
 func (b SSDBBackend) ReadAllPresets() (data [][]byte, err error) {
-	c, e := redigo.Dial("tcp", dbhost+":"+dbport)
+	addr := fmt.Sprintf("%s:%d", b.host, b.port)
+	c, e := redigo.Dial("tcp", addr)
 	if e != nil {
 		err = e
 		return
@@ -80,9 +74,5 @@ func (b SSDBBackend) ReadAllPresets() (data [][]byte, err error) {
 }
 
 func (b SSDBBackend) WritePreset(name string, data []byte) error {
-	k := fmt.Sprintf("preset:%s", name)
-	if err := NewRedisClient().Set(k, data, 0); err != nil {
-		return err.Err()
-	}
-	return nil
+	return b.redis.WritePreset(name, data)
 }

@@ -8,19 +8,24 @@ import (
 
 // A RedisBackend implements Backend and connects to redis
 // with a 24h expiration on stored entries
-type RedisBackend struct{}
+type RedisBackend struct {
+	host string
+	port int
+}
 
-func NewRedisClient() *redis.Client {
+func (b RedisBackend) NewClient() *redis.Client {
 	return redis.NewClient(&redis.Options{
-		Addr:     dbhost + ":" + dbport,
+		Addr:     fmt.Sprintf("%s:%d", b.host, b.port),
 		Password: "", // no password set
 		DB:       0,  // use default DB
 	})
 }
 
 // Implements Backend
-func (b RedisBackend) Init() error {
-	_, err := NewRedisClient().Ping().Result()
+func (b *RedisBackend) Init(host string, port int) error {
+	b.host = host
+	b.port = port
+	_, err := b.NewClient().Ping().Result()
 	return err
 }
 
@@ -30,7 +35,7 @@ func (b RedisBackend) RecordedTape(name string, i Incrementer) *RecordedTape {
 		tape: &RedisTape{
 			name:   name,
 			i:      i,
-			client: NewRedisClient(),
+			client: b.NewClient(),
 		},
 	}
 }
@@ -41,7 +46,7 @@ func (b RedisBackend) BlankTape(name string, i Incrementer) *BlankTape {
 		tape: &RedisTape{
 			name:   name,
 			i:      i,
-			client: NewRedisClient(),
+			client: b.NewClient(),
 		},
 	}
 }
@@ -70,11 +75,11 @@ func (t *RedisTape) Read() ([]byte, error) {
 // Implements PresetBackend
 func (b RedisBackend) ReadPreset(name string) (data []byte, err error) {
 	k := fmt.Sprintf("preset:%s", name)
-	return NewRedisClient().Get(k).Bytes()
+	return b.NewClient().Get(k).Bytes()
 }
 
 func (b RedisBackend) ReadAllPresets() (data [][]byte, err error) {
-	client := NewRedisClient()
+	client := b.NewClient()
 	keys, e := client.Keys("preset:*").Result()
 	if e != nil {
 		err = e
@@ -95,7 +100,7 @@ func (b RedisBackend) ReadAllPresets() (data [][]byte, err error) {
 
 func (b RedisBackend) WritePreset(name string, data []byte) error {
 	k := fmt.Sprintf("preset:%s", name)
-	if err := NewRedisClient().Set(k, data, 0); err != nil {
+	if err := b.NewClient().Set(k, data, 0); err != nil {
 		return err.Err()
 	}
 	return nil

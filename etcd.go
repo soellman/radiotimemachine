@@ -13,9 +13,11 @@ type EtcdBackend struct {
 	client client.Client
 }
 
-func (b *EtcdBackend) Init() error {
+// Implements Backend
+func (b *EtcdBackend) Init(host string, port int) error {
+	ep := fmt.Sprintf("http://%s:%d", host, port)
 	cfg := client.Config{
-		Endpoints: []string{"http://127.0.0.1:2379"},
+		Endpoints: []string{ep},
 		Transport: client.DefaultTransport,
 	}
 	c, err := client.New(cfg)
@@ -23,11 +25,6 @@ func (b *EtcdBackend) Init() error {
 		return err
 	}
 	b.client = c
-	return nil
-}
-
-// Implements Backend
-func (b EtcdBackend) Ping() error {
 	return nil
 }
 

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -15,23 +17,47 @@ const (
 )
 
 var (
-	dbhost string = "localhost"
-	dbport string = "8888"
+	driver    string
+	dbhost    string
+	dbport    int
+	record    bool
+	broadcast bool
+	addr      string
 )
 
-func main() {
-	var backend Backend
-	//backend = &EtcdBackend{}
-	//backend = &RedisBackend{}
-	backend = &SSDBBackend{}
+func init() {
+	flag.StringVar(&driver, "driver", "ssdb", "Database driver: etcd|redis|ssdb")
+	flag.StringVar(&dbhost, "dbhost", "localhost", "Database host")
+	flag.IntVar(&dbport, "dbport", 8888, "Database port")
+	flag.BoolVar(&record, "record", true, "Record presets")
+	flag.BoolVar(&broadcast, "broadcast", true, "Broadcast to users")
+	flag.StringVar(&addr, "addr", ":8080", "Broadcast address")
+}
 
-	if err := backend.Init(); err != nil {
-		log.Fatalf("cannot init backend: %v\n", err)
+func main() {
+	flag.Parse()
+
+	var backend Backend
+	switch driver {
+	case "etcd":
+		backend = &EtcdBackend{}
+	case "redis":
+		backend = &RedisBackend{}
+	case "ssdb":
+		backend = &SSDBBackend{}
+	default:
+		fmt.Printf("No %s driver found\n", driver)
+		os.Exit(1)
+	}
+
+	if err := backend.Init(dbhost, dbport); err != nil {
+		log.Fatalf("Cannot init backend: %v\n", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	r := Radio{
 		ctx:      ctx,
+		Address:  addr,
 		Stations: make(map[string]*Station),
 		TapeDeck: &TapeDeck{
 			backend: backend,
@@ -40,23 +66,11 @@ func main() {
 			backend: backend,
 		},
 		Options: RadioOptions{
-			Broadcast: true,
-			Listen:    true,
+			Broadcast: broadcast,
+			Listen:    record,
 		},
 	}
 	r.On()
-
-	if false {
-		s := &Station{
-			Name:     "wamc",
-			Url:      "http://playerservices.streamtheworld.com/api/livestream-redirect/WAMCFM.mp3",
-			Location: "America/New_York",
-		}
-
-		// ignore error
-		_ = s.Init()
-		r.AddStation(s)
-	}
 
 	sigs := make(chan os.Signal, 1)
 	done := make(chan bool, 1)
