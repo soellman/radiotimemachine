@@ -44,7 +44,7 @@ func main() {
 	case "redis":
 		backend = &RedisBackend{}
 	case "ssdb":
-		backend = &SSDBBackend{}
+		backend = &RedisBackend{ssdb: true}
 	default:
 		fmt.Printf("No %s driver found\n", driver)
 		os.Exit(1)
