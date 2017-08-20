@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/go-redis/redis"
@@ -61,7 +60,7 @@ type RedisTape struct {
 func (t *RedisTape) Write(data []byte) error {
 	k := fmt.Sprintf("chunk:%s:%s", t.name, t.i.Key())
 	if t.ssdb {
-		ttl := strconv.Itoa(int(TTL / time.Second))
+		ttl := int(TTL / time.Second)
 		if err := SSDBSetx(t.client, k, string(data), ttl).Err(); err != nil {
 			return err
 		}
@@ -116,8 +115,9 @@ func (b RedisBackend) WritePreset(name string, data []byte) error {
 }
 
 // ssdb command support
-func SSDBSetx(client *redis.Client, key, value, ttl string) *redis.StatusCmd {
-	cmd := redis.NewStatusCmd("setx", key, value, ttl)
+// this is very weird. why does it need a stringslicecommand?
+func SSDBSetx(client *redis.Client, key, value string, ttl int) *redis.StringSliceCmd {
+	cmd := redis.NewStringSliceCmd("setx", key, value, ttl)
 	client.Process(cmd)
 	return cmd
 }
