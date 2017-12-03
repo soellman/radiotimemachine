@@ -1,17 +1,20 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"strings"
+	"sync"
 	"time"
+
+	"golang.org/x/net/context"
 
 	"github.com/pkg/errors"
 )
 
-type Location time.Location
+type stopChan chan struct{}
 
 // Station represents a radio station and its location
 type Station struct {
@@ -30,15 +33,18 @@ func (s *Station) Init() (err error) {
 
 // Tune into the station, and return a stream, or error
 func (s *Station) Tune(ctx context.Context) (*Stream, error) {
-	res, err := http.Get(s.Url)
+	req, err := http.NewRequest("GET", s.Url, nil)
+	req = req.WithContext(ctx)
+
+	client := &http.Client{}
+	res, err := client.Do(req)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error connecting to %s", s.Name)
 	}
-	// TODO: where do we close the body?
-	//defer res.Body.Close()
 
 	bitrate, err := DetectBitrate(res.Body)
 	if err != nil {
+		res.Body.Close()
 		return nil, errors.Wrapf(err, "error detecting bitrate for %s", s.Name)
 	}
 
@@ -90,18 +96,20 @@ func (s *Stream) Chunksize() int {
 // The Dial is used to tune in to a station
 // does this need to be an interface?
 type Dialer interface {
-	Tune(ctx context.Context) (s Stream, err error)
+	Tune() (s Stream, err error)
 }
 
 // RadioOptions enables some radio features
 type RadioOptions struct {
 	Broadcast bool
-	Listen    bool
+	Record    bool
 }
 
 // A Radio manages all the stations and recordings
 type Radio struct {
-	ctx      context.Context
+	stop stopChan
+	wg   *sync.WaitGroup
+
 	Address  string
 	Stations map[string]*Station
 	Presets  *Presets
@@ -109,26 +117,61 @@ type Radio struct {
 	Options  RadioOptions
 }
 
-// Listen tunes into a station and records to a blank tape
-func (r *Radio) Listen(s *Station) error {
-	stream, err := s.Tune(r.ctx)
-	if err != nil {
-		log.Printf("error recording station %s: %v", s.Name, err)
-		return err
+// Record tunes into a station and records to a blank tape
+func (r *Radio) StartRecording(s *Station) {
+	r.wg.Add(1)
+	defer r.wg.Done()
+
+	// Use a context to provide cancellation of the http client
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-r.stop
+		cancel()
+	}()
+
+	// TODO: wrap in backoff loop
+	for {
+		stream, err := s.Tune(ctx)
+		if err != nil {
+			if strings.HasSuffix(err.Error(), "context canceled") {
+				log.Printf("canceled stream")
+				return
+			}
+
+			log.Println(err)
+			// r.LogStatus(s.Name, Status{state: StatusErr, err: err})
+			continue
+		}
+
+		// should this maybe throw an error?
+		// if so, set status to error
+		tape := r.TapeDeck.BlankTape(s.Name, s.CurrentTime())
+
+		size := stream.Chunksize()
+		log.Printf("Recording %s with chunksize %d", s.Name, size)
+		// r.LogStatus(s.Name, Status{state: StatusRunning})
+
+		// TODO: how can we watch for cancellation here?
+		// if we cancel the http connection, chunkpipe will return
+		if err := ChunkPipe(size, stream, tape); err != nil {
+			if strings.HasSuffix(err.Error(), "context canceled") {
+				log.Printf("canceled stream")
+				return
+			}
+
+			log.Println(err)
+			// r.LogStatus(s.Name, Status{state: StatusErr})
+			continue
+		}
+		log.Println("chunkpipe returned")
 	}
 
-	size := stream.Chunksize()
-	tape := r.TapeDeck.BlankTape(s.Name, s.CurrentTime())
-
-	log.Printf("Recording %s with chunksize %d", s.Name, size)
-	go ChunkPump(size, stream, tape)
-
-	return nil
+	return
 }
 
 // Turn on the radio and start recording presets
 func (r *Radio) On() {
-	if r.Options.Listen {
+	if r.Options.Record {
 		log.Println("Loading presets")
 		stations, err := r.Presets.Load()
 		if err != nil {
@@ -144,8 +187,11 @@ func (r *Radio) On() {
 			r.Stations[s.Name] = s
 		}
 
+		// r.wg.Add(1)
+		// r.ManageRecordings(r.stop, r.wg)
+
 		for _, s := range r.Stations {
-			r.Listen(s)
+			go r.StartRecording(s)
 		}
 	}
 
@@ -236,7 +282,7 @@ func (r *Radio) Stream(t *RecordedTape, rw http.ResponseWriter) error {
 
 	for {
 		select {
-		case <-r.ctx.Done():
+		case <-r.stop:
 			log.Printf("cancelling stream\n")
 			return errStreamCancelled
 		case <-ticker.C:
@@ -251,30 +297,11 @@ func (r *Radio) Stream(t *RecordedTape, rw http.ResponseWriter) error {
 func (r *Radio) AddStation(s *Station) {
 	r.Stations[s.Name] = s
 	r.Presets.Add(s)
-	r.Listen(s)
+	r.StartRecording(s)
 }
 
 type Backend interface {
 	Init(host string, port int) error
 	PresetBackend
 	TapeBackend
-}
-
-// ChunkPump pumps reads from the reader to the writer
-// with a specified chunksize. This will return when
-// the reader finishes or errors.
-func ChunkPump(size int, r io.Reader, w io.Writer) error {
-	b := make([]byte, size)
-
-	for {
-		if _, err := io.ReadFull(r, b); err != nil {
-			if err == io.EOF {
-				return nil
-			}
-			return err
-		}
-		if _, err := w.Write(b); err != nil {
-			return err
-		}
-	}
 }

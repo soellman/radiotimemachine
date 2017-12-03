@@ -65,3 +65,24 @@ func DetectBitrate(r io.Reader) (bps int, err error) {
 
 	return
 }
+
+// IO FUNCTIONS
+
+// ChunkPipe pumps reads from the reader to the writer
+// with a specified chunksize. This will return when
+// the reader finishes or errors.
+func ChunkPipe(size int, r io.Reader, w io.Writer) error {
+	b := make([]byte, size)
+
+	for {
+		if _, err := io.ReadFull(r, b); err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+		if _, err := w.Write(b); err != nil {
+			return err
+		}
+	}
+}

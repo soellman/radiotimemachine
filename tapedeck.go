@@ -1,16 +1,11 @@
 package main
 
-import (
-	"time"
-
-	"golang.org/x/net/context"
-)
+import "time"
 
 const TTL = time.Duration(24 * time.Hour)
 
 // A TapeDeck is the backend that records and plays tapes
 type TapeDeck struct {
-	ctx     context.Context
 	backend TapeBackend
 }
 

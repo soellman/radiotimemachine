@@ -1,14 +1,13 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
-	"time"
 )
 
 const (
@@ -54,9 +53,9 @@ func main() {
 		log.Fatalf("Cannot init backend: %v\n", err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	stop := make(stopChan)
 	r := Radio{
-		ctx:      ctx,
+		stop:     stop,
 		Address:  addr,
 		Stations: make(map[string]*Station),
 		TapeDeck: &TapeDeck{
@@ -67,9 +66,18 @@ func main() {
 		},
 		Options: RadioOptions{
 			Broadcast: broadcast,
-			Listen:    record,
+			Record:    record,
 		},
+		//RecordingEngineer: RecordingEngineer{
+		//	ch: make(chan StatusMessage, 1),
+		//	s:  make(map[string]Status),
+		//},
+		wg: &sync.WaitGroup{},
 	}
+	log.Println("Powering on the time machine")
+	log.Printf("  with options: %+v\n", r.Options)
+	log.Printf("  and driver: %s\n", driver)
+	log.Printf("  and db addr: %s:%d\n", dbhost, dbport)
 	r.On()
 
 	sigs := make(chan os.Signal, 1)
@@ -80,10 +88,13 @@ func main() {
 	go func() {
 		sig := <-sigs
 		log.Printf("Received signal %s", sig)
-		cancel()
-		time.Sleep(100 * time.Millisecond) // leave time for cancellation
+		log.Println("Powering down the time machine")
+		close(r.stop)
 		done <- true
 	}()
 
 	<-done
+
+	r.wg.Wait()
+	log.Println("Done")
 }
