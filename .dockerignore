@@ -1,2 +1,4 @@
+fixtures
+*.go
 radiotimemachine
 vendor

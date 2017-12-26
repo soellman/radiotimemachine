@@ -63,6 +63,7 @@ func TestPresets(t *testing.T) {
 		t.Errorf("Presets.Load failed, %v", err)
 	}
 
+	ts.Init()
 	expected := []*Station{ts}
 	if !reflect.DeepEqual(stations, expected) {
 		t.Errorf("Presets.Load didn't match. Expected %v, got %v", expected, stations)

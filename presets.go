@@ -22,21 +22,21 @@ func PresetsWithBackend(b PresetBackend) (*Presets, error) {
 }
 
 func (p *Presets) Load() ([]*Station, error) {
-	st := []*Station{}
+	stations := []*Station{}
 
 	data, err := p.backend.ReadAllPresets()
 	if err != nil {
-		return st, errors.Wrap(err, "failed to read stations")
+		return stations, errors.Wrap(err, "failed to read stations")
 	}
 
 	for _, d := range data {
-		station := &Station{}
-		if err = json.Unmarshal(d, station); err != nil {
-			return st, errors.Wrap(err, "failed to unmarshal station")
+		s, err := stationFromData(d)
+		if err != nil {
+			return nil, err
 		}
-		st = append(st, station)
+		stations = append(stations, s)
 	}
-	return st, nil
+	return stations, nil
 }
 
 func (p *Presets) Add(s *Station) error {
@@ -59,8 +59,12 @@ func (p *Presets) Lookup(name string) (*Station, error) {
 		return nil, errors.Wrap(err, "station not found")
 	}
 
+	return stationFromData(data)
+}
+
+func stationFromData(data []byte) (*Station, error) {
 	s := &Station{}
-	err = json.Unmarshal(data, s)
+	err := json.Unmarshal(data, s)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to unmarshal station")
 	}

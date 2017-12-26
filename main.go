@@ -4,9 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 )
 
@@ -25,11 +25,11 @@ var (
 )
 
 func init() {
-	flag.StringVar(&driver, "driver", "ssdb", "Database driver: etcd|redis|ssdb")
+	flag.StringVar(&driver, "driver", "redis", "Database driver: etcd|redis|ssdb")
 	flag.StringVar(&dbhost, "dbhost", "localhost", "Database host")
-	flag.IntVar(&dbport, "dbport", 8888, "Database port")
-	flag.BoolVar(&record, "record", true, "Record presets")
-	flag.BoolVar(&broadcast, "broadcast", true, "Broadcast to users")
+	flag.IntVar(&dbport, "dbport", 6379, "Database port")
+	flag.BoolVar(&record, "record", false, "Record presets")
+	flag.BoolVar(&broadcast, "broadcast", false, "Broadcast to users")
 	flag.StringVar(&addr, "addr", ":8080", "Broadcast address")
 }
 
@@ -53,11 +53,8 @@ func main() {
 		log.Fatalf("Cannot init backend: %v\n", err)
 	}
 
-	stop := make(stopChan)
 	r := Radio{
-		stop:     stop,
-		Address:  addr,
-		Stations: make(map[string]*Station),
+		Server: &http.Server{Addr: addr},
 		TapeDeck: &TapeDeck{
 			backend: backend,
 		},
@@ -72,8 +69,8 @@ func main() {
 		//	ch: make(chan StatusMessage, 1),
 		//	s:  make(map[string]Status),
 		//},
-		wg: &sync.WaitGroup{},
 	}
+
 	log.Println("Powering on the time machine")
 	log.Printf("  with options: %+v\n", r.Options)
 	log.Printf("  and driver: %s\n", driver)
@@ -82,19 +79,16 @@ func main() {
 
 	sigs := make(chan os.Signal, 1)
 	done := make(chan bool, 1)
-
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
 		sig := <-sigs
 		log.Printf("Received signal %s", sig)
 		log.Println("Powering down the time machine")
-		close(r.stop)
+		r.Off()
 		done <- true
 	}()
 
 	<-done
-
-	r.wg.Wait()
 	log.Println("Done")
 }
