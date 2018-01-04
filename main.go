@@ -3,11 +3,13 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 )
 
 const (
@@ -16,26 +18,51 @@ const (
 )
 
 var (
-	driver    string
-	dbhost    string
-	dbport    int
-	record    bool
-	broadcast bool
-	addr      string
+	logger log.Logger
 )
 
-func init() {
+// Configure and return the radio
+func configure() *Radio {
+	// Parse flags
+	var (
+		driver    string
+		dbhost    string
+		dbport    int
+		record    bool
+		broadcast bool
+		addr      string
+		loglevel  string
+	)
+
 	flag.StringVar(&driver, "driver", "redis", "Database driver: etcd|redis|ssdb")
 	flag.StringVar(&dbhost, "dbhost", "localhost", "Database host")
 	flag.IntVar(&dbport, "dbport", 6379, "Database port")
 	flag.BoolVar(&record, "record", false, "Record presets")
 	flag.BoolVar(&broadcast, "broadcast", false, "Broadcast to users")
 	flag.StringVar(&addr, "addr", ":8080", "Broadcast address")
-}
+	flag.StringVar(&loglevel, "loglevel", "info", "Logging level: debug|info|warn|error")
 
-func main() {
 	flag.Parse()
 
+	// Initialize logging
+	logger = log.NewLogfmtLogger(os.Stdout)
+	switch loglevel {
+	case "debug":
+		logger = level.NewFilter(logger, level.AllowDebug())
+	case "info":
+		logger = level.NewFilter(logger, level.AllowInfo())
+	case "warn":
+		logger = level.NewFilter(logger, level.AllowWarn())
+	case "error":
+		logger = level.NewFilter(logger, level.AllowError())
+	default:
+		level.Error(logger).Log("msg", fmt.Sprintf("No %q loglevel found", loglevel))
+		os.Exit(1)
+	}
+	logger = log.With(logger, "caller", log.DefaultCaller)
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+
+	// Initialize the backend
 	var backend Backend
 	switch driver {
 	case "etcd":
@@ -45,15 +72,22 @@ func main() {
 	case "ssdb":
 		backend = &RedisBackend{ssdb: true}
 	default:
-		fmt.Printf("No %s driver found\n", driver)
+		level.Error(logger).Log("msg", fmt.Sprintf("No %q driver found", driver))
 		os.Exit(1)
 	}
 
 	if err := backend.Init(dbhost, dbport); err != nil {
-		log.Fatalf("Cannot init backend: %v\n", err)
+		level.Error(logger).Log(
+			"msg", fmt.Sprintf("Cannot init backend with driver %s", driver),
+			"err", err)
+		os.Exit(1)
 	}
+	level.Info(logger).Log("msg", "Backend initialized",
+		"driver", driver,
+		"dbaddr", fmt.Sprintf("%s:%d", dbhost, dbport))
 
-	r := Radio{
+	// Construct the radio
+	return &Radio{
 		Server: &http.Server{Addr: addr},
 		TapeDeck: &TapeDeck{
 			backend: backend,
@@ -70,12 +104,11 @@ func main() {
 		//	s:  make(map[string]Status),
 		//},
 	}
+}
 
-	log.Println("Powering on the time machine")
-	log.Printf("  with options: %+v\n", r.Options)
-	log.Printf("  and driver: %s\n", driver)
-	log.Printf("  and db addr: %s:%d\n", dbhost, dbport)
-	r.On()
+func main() {
+	radio := configure()
+	radio.On()
 
 	sigs := make(chan os.Signal, 1)
 	done := make(chan bool, 1)
@@ -83,12 +116,11 @@ func main() {
 
 	go func() {
 		sig := <-sigs
-		log.Printf("Received signal %s", sig)
-		log.Println("Powering down the time machine")
-		r.Off()
+		level.Info(logger).Log("msg", fmt.Sprintf("Received signal %s", sig))
+		radio.Off()
 		done <- true
 	}()
 
 	<-done
-	log.Println("Done")
+	level.Info(logger).Log("msg", "done")
 }

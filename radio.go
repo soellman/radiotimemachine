@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -10,6 +9,9 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cenkalti/backoff"
+	"github.com/go-kit/kit/log/level"
+	"github.com/gorilla/handlers"
 	"github.com/pkg/errors"
 )
 
@@ -44,18 +46,22 @@ func (r *Radio) StartRecording(s *Station) {
 		cancel()
 	}()
 
-	// TODO: wrap in backoff loop
-	for {
+	rec := func() error {
 		stream, err := s.Tune(ctx)
 		if err != nil {
 			if strings.HasSuffix(err.Error(), "context canceled") {
-				log.Printf("canceled stream")
-				return
+				level.Debug(logger).Log(
+					"msg", "canceled stream",
+					"station", s.Name)
+				return nil
 			}
 
-			log.Println(err)
+			level.Warn(logger).Log(
+				"msg", "error tuning into station",
+				"station", s.Name,
+				"err", err)
 			// r.LogStatus(s.Name, Status{state: StatusErr, err: err})
-			continue
+			return err
 		}
 
 		// should this maybe throw an error?
@@ -63,56 +69,100 @@ func (r *Radio) StartRecording(s *Station) {
 		tape := r.TapeDeck.BlankTape(s.Name, s.CurrentTime())
 
 		size := stream.Chunksize()
-		log.Printf("Recording %s with chunksize %d", s.Name, size)
+		level.Info(logger).Log(
+			"msg", fmt.Sprintf("Recording station with chunksize %d", size),
+			"station", s.Name)
 		// r.LogStatus(s.Name, Status{state: StatusRunning})
 
 		if err := ChunkPipe(size, stream, tape); err != nil {
 			if strings.HasSuffix(err.Error(), "context canceled") {
-				log.Printf("canceled stream")
-				return
+				level.Debug(logger).Log(
+					"msg", "canceled stream",
+					"station", s.Name)
+				return nil
 			}
 
-			log.Println(err)
+			level.Warn(logger).Log(
+				"msg", "error in chunkpipe",
+				"err", err)
 			// r.LogStatus(s.Name, Status{state: StatusErr})
-			continue
+			return err
 		}
-		log.Println("chunkpipe returned")
+
+		level.Debug(logger).Log(
+			"msg", "chunkpipe returned",
+			"station", s.Name)
+		return nil
+	}
+
+	b := backoff.NewExponentialBackOff()
+	b.InitialInterval = 2 * time.Second
+	b.RandomizationFactor = 0
+
+	err := backoff.Retry(rec, b)
+	if err != nil {
+		level.Warn(logger).Log(
+			"msg", "error after retrying",
+			"err", err)
 	}
 }
 
 // Turn on the radio and start recording presets
 func (r *Radio) On() {
+	level.Info(logger).Log(
+		"msg", "Powering on the time machine",
+		"record", r.Options.Record,
+		"broadcast", r.Options.Broadcast)
+
 	r.stop = make(stopChan)
 	r.wg = &sync.WaitGroup{}
 	r.wg.Add(1)
 
 	if r.Options.Record {
-		log.Println("Loading presets")
+		level.Info(logger).Log("msg", "Starting recording presets")
+
 		stations, err := r.Presets.Load()
 		if err != nil {
-			log.Printf("error loading presets: %v", err)
+			level.Warn(logger).Log(
+				"msg", "error loading presets",
+				"err", err)
 		}
 
 		for _, s := range stations {
 			err = s.Init()
 			if err != nil {
-				log.Printf("error loading preset %s: %v", s.Name, err)
+				level.Warn(logger).Log(
+					"msg", "error loading preset",
+					"station", s.Name,
+					"err", err)
 				continue
 			}
-			go r.StartRecording(s)
+			go r.StartRecording(&s)
 		}
 
 		// r.ManageRecordings(r.stop, r.wg)
 	}
 
 	if r.Options.Broadcast {
-		http.HandleFunc("/", r.Broadcast)
-		log.Println("Starting broadcast")
+		r.Presets.RegisterServiceHandlers(http.DefaultServeMux)
+		http.HandleFunc("/listen", r.Broadcast)
+
+		// enable cors
+		cors := handlers.CORS(
+			handlers.AllowedHeaders([]string{"Content-Type"}),
+			handlers.AllowedMethods([]string{"GET", "POST"}),
+			handlers.AllowedOrigins([]string{"*"}))
+		r.Server.Handler = cors(http.DefaultServeMux)
+
+		level.Info(logger).Log("msg", "Starting broadcast and preset service")
+
 		go r.Server.ListenAndServe()
 	}
 }
 
 func (r *Radio) Off() {
+	level.Info(logger).Log("msg", "Powering down the time machine")
+
 	timeout, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	r.Server.Shutdown(timeout)
 	close(r.stop)
@@ -138,7 +188,10 @@ func (r *Radio) Broadcast(rw http.ResponseWriter, req *http.Request) {
 	listenerTime := s.ListenerTime(sp.listenerLocation)
 	tape := r.TapeDeck.RecordedTape(s.Name, listenerTime)
 
-	log.Printf("Streaming %s to %s\n", s.Name, req.RemoteAddr)
+	level.Info(logger).Log(
+		"msg", "Broadcasting station",
+		"station", s.Name,
+		"client", req.RemoteAddr)
 
 	// Set up trailers
 	// thanks http://engineering.pivotal.io/post/http-trailers/
@@ -167,7 +220,7 @@ func writeTrailers(err error, rw http.ResponseWriter, trailerKey string) {
 }
 
 var (
-	errStreamCancelled  = errors.New("stream cancelled")
+	errStreamCanceled   = errors.New("stream canceled")
 	errStreamReadError  = errors.New("backend error")
 	errStreamWriteError = errors.New("client error")
 )
@@ -176,11 +229,15 @@ func (r *Radio) Stream(t *RecordedTape, rw http.ResponseWriter) error {
 	pushchunk := func() error {
 		chunk, err := t.tape.Read()
 		if err != nil {
-			log.Printf("read error from tape: %+v\n", err)
+			level.Warn(logger).Log(
+				"msg", "error reading from tape",
+				"err", err)
 			return errStreamReadError
 		}
 		if _, err := rw.Write(chunk); err != nil {
-			log.Printf("write error to client: %+v\n", err)
+			level.Warn(logger).Log(
+				"msg", "error writing to client",
+				"err", err)
 			return errStreamWriteError
 		}
 		rw.(http.Flusher).Flush()
@@ -200,20 +257,14 @@ func (r *Radio) Stream(t *RecordedTape, rw http.ResponseWriter) error {
 	for {
 		select {
 		case <-r.stop:
-			log.Printf("cancelling stream\n")
-			return errStreamCancelled
+			level.Debug(logger).Log("msg", "canceling stream")
+			return errStreamCanceled
 		case <-ticker.C:
 			if err := pushchunk(); err != nil {
 				return err
 			}
 		}
 	}
-}
-
-// TODO: where should errors go?
-func (r *Radio) AddStation(s *Station) {
-	r.Presets.Add(s)
-	r.StartRecording(s)
 }
 
 type Backend interface {

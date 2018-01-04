@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	ts = &Station{
+	ts = Station{
 		Name:     "wamc",
 		Url:      "http://playerservices.streamtheworld.com/api/livestream-redirect/WAMCHD2.mp3",
 		Location: "America/New_York",
@@ -64,7 +64,7 @@ func TestPresets(t *testing.T) {
 	}
 
 	ts.Init()
-	expected := []*Station{ts}
+	expected := []Station{ts}
 	if !reflect.DeepEqual(stations, expected) {
 		t.Errorf("Presets.Load didn't match. Expected %v, got %v", expected, stations)
 	}
