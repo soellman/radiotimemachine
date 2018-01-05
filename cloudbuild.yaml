@@ -1,0 +1,20 @@
+steps:
+- name: 'gcr.io/cloud-builders/go'
+  args: ['test', './...']
+  env: ['PROJECT_ROOT=github.com/soellman/radiotimemachine']
+- name: 'gcr.io/cloud-builders/go'
+  args: ['build', '-a', '-ldflags', "'-s'", '-tags', 'netgo', '-installsuffix', 'netgo', '-o', 'radiotimemachine-linux']
+  env: [
+         'PROJECT_ROOT=github.com/soellman/radiotimemachine',
+         'CGO_ENABLED=0',
+         'GOOS=linux'
+       ]
+- name: 'gcr.io/cloud-builders/docker'
+  args: [
+          'build',
+          '--cache-from', 'gcr.io/$PROJECT_ID/radiotimemachine',
+          '-t', 'gcr.io/$PROJECT_ID/radiotimemachine:$SHORT_SHA',
+          '.'
+        ]
+images: ['gcr.io/$PROJECT_ID/radiotimemachine']
+
