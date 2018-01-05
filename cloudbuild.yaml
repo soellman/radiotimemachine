@@ -12,8 +12,9 @@ steps:
 - name: 'gcr.io/cloud-builders/docker'
   args: [
           'build',
-          '--cache-from', 'gcr.io/$PROJECT_ID/radiotimemachine',
+          '--cache-from', 'gcr.io/$PROJECT_ID/radiotimemachine:latest',
           '-t', 'gcr.io/$PROJECT_ID/radiotimemachine:$SHORT_SHA',
+          '-t', 'gcr.io/$PROJECT_ID/radiotimemachine:latest',
           '.'
         ]
 images: ['gcr.io/$PROJECT_ID/radiotimemachine']
