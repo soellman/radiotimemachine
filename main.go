@@ -37,8 +37,8 @@ func configure() *Radio {
 	flag.StringVar(&driver, "driver", "redis", "Database driver: etcd|redis|ssdb")
 	flag.StringVar(&dbhost, "dbhost", "localhost", "Database host")
 	flag.IntVar(&dbport, "dbport", 6379, "Database port")
-	flag.BoolVar(&record, "record", false, "Record presets")
-	flag.BoolVar(&broadcast, "broadcast", false, "Broadcast to users")
+	flag.BoolVar(&record, "record", true, "Record presets")
+	flag.BoolVar(&broadcast, "broadcast", true, "Broadcast to users")
 	flag.StringVar(&addr, "addr", ":8080", "Broadcast address")
 	flag.StringVar(&loglevel, "loglevel", "info", "Logging level: debug|info|warn|error")
 
