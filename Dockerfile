@@ -1,4 +1,5 @@
-FROM scratch
+FROM alpine
+RUN apk add -U tzdata
 
 COPY radiotimemachine-linux /radiotimemachine
 
