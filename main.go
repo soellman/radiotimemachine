@@ -61,6 +61,9 @@ func configure() *Radio {
 	}
 	logger = log.With(logger, "caller", log.DefaultCaller)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+	logger.Log(
+		"msg", "Logging initialized",
+		"level", loglevel)
 
 	// Initialize the backend
 	var backend Backend
@@ -82,7 +85,8 @@ func configure() *Radio {
 			"err", err)
 		os.Exit(1)
 	}
-	level.Info(logger).Log("msg", "Backend initialized",
+	level.Info(logger).Log(
+		"msg", "Backend initialized",
 		"driver", driver,
 		"dbaddr", fmt.Sprintf("%s:%d", dbhost, dbport))
 
@@ -99,6 +103,8 @@ func configure() *Radio {
 			Broadcast: broadcast,
 			Record:    record,
 		},
+		PathBroadcast: "/listen/",
+		PathPreset:    "/preset/",
 		//RecordingEngineer: RecordingEngineer{
 		//	ch: make(chan StatusMessage, 1),
 		//	s:  make(map[string]Status),

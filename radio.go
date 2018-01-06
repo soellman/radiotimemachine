@@ -30,6 +30,9 @@ type Radio struct {
 	TapeDeck *TapeDeck
 	Options  RadioOptions
 
+	PathBroadcast string
+	PathPreset    string
+
 	stop stopChan
 	wg   *sync.WaitGroup
 }
@@ -144,8 +147,8 @@ func (r *Radio) On() {
 	}
 
 	if r.Options.Broadcast {
-		r.Presets.RegisterServiceHandlers(http.DefaultServeMux)
-		http.HandleFunc("/listen", r.Broadcast)
+		r.Presets.RegisterServiceHandlers(r.PathPreset, http.DefaultServeMux)
+		http.HandleFunc(r.PathBroadcast, r.Broadcast)
 
 		// enable cors
 		cors := handlers.CORS(
@@ -155,14 +158,14 @@ func (r *Radio) On() {
 		r.Server.Handler = cors(http.DefaultServeMux)
 
 		level.Info(logger).Log("msg", "Starting broadcast and preset service")
-
-		go r.Server.ListenAndServe()
 	}
 
 	// simple healthcheck
 	http.HandleFunc("/", http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) },
 	))
+
+	go r.Server.ListenAndServe()
 }
 
 func (r *Radio) Off() {
@@ -177,15 +180,25 @@ func (r *Radio) Off() {
 
 // Broadcast listens for requests and streams a station
 func (r *Radio) Broadcast(rw http.ResponseWriter, req *http.Request) {
-	sp, err := ParsePath(req.URL.Path[1:])
+	sp, err := ParsePath(strings.TrimPrefix(req.URL.Path, r.PathBroadcast))
 	if err != nil {
+		level.Warn(logger).Log(
+			"msg", "Failed to broadcast",
+			"client", req.RemoteAddr,
+			"err", err)
+
 		http.NotFound(rw, req)
-		fmt.Fprintln(rw, "want path: /<station>/<location e.g. America/New_York>")
 		return
 	}
 
 	s, err := r.Presets.Lookup(sp.stationName)
 	if err != nil {
+		level.Warn(logger).Log(
+			"msg", "Failed to broadcast",
+			"station", sp.stationName,
+			"client", req.RemoteAddr,
+			"err", err)
+
 		http.NotFound(rw, req)
 		return
 	}
@@ -193,7 +206,7 @@ func (r *Radio) Broadcast(rw http.ResponseWriter, req *http.Request) {
 	listenerTime := s.ListenerTime(sp.listenerLocation)
 	tape := r.TapeDeck.RecordedTape(s.Name, listenerTime)
 
-	level.Info(logger).Log(
+	level.Debug(logger).Log(
 		"msg", "Broadcasting station",
 		"station", s.Name,
 		"client", req.RemoteAddr)
@@ -204,8 +217,18 @@ func (r *Radio) Broadcast(rw http.ResponseWriter, req *http.Request) {
 	rw.Header().Set("Trailer", trailerKey)
 
 	if err := r.Stream(tape, rw); err != nil {
+		level.Debug(logger).Log(
+			"msg", "writing trailers",
+			"station", s.Name,
+			"client", req.RemoteAddr,
+			"err", err)
 		writeTrailers(err, rw, trailerKey)
 	}
+
+	level.Debug(logger).Log(
+		"msg", "Broadcast complete",
+		"station", s.Name,
+		"client", req.RemoteAddr)
 }
 
 func writeTrailers(err error, rw http.ResponseWriter, trailerKey string) {

@@ -118,7 +118,7 @@ func makeListEndpoint(svc PresetService) endpoint.Endpoint {
 }
 
 // Register the PresetService handlers with an http.ServeMux
-func (p *Presets) RegisterServiceHandlers(mux *http.ServeMux) {
+func (p *Presets) RegisterServiceHandlers(path string, mux *http.ServeMux) {
 	svc := presetService{presets: p}
 
 	listHandler := httptransport.NewServer(
@@ -127,5 +127,5 @@ func (p *Presets) RegisterServiceHandlers(mux *http.ServeMux) {
 		encodeResponse,
 	)
 
-	mux.Handle("/preset/list", listHandler)
+	mux.Handle(path+"list", listHandler)
 }
