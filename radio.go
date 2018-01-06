@@ -158,6 +158,11 @@ func (r *Radio) On() {
 
 		go r.Server.ListenAndServe()
 	}
+
+	// simple healthcheck
+	http.HandleFunc("/", http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) },
+	))
 }
 
 func (r *Radio) Off() {

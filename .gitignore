@@ -3,3 +3,5 @@ radiotimemachine
 radiotimemachine-linux
 *swp
 .cover.out
+tmp
+kson
