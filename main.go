@@ -94,10 +94,10 @@ func configure() *Radio {
 	return &Radio{
 		Server: &http.Server{Addr: addr},
 		TapeDeck: &TapeDeck{
-			backend: backend,
+			backend: backend.(TapeBackend),
 		},
 		Presets: &Presets{
-			backend: backend,
+			backend: backend.(PresetBackend),
 		},
 		Options: RadioOptions{
 			Broadcast: broadcast,

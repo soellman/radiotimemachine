@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -20,9 +21,13 @@ type Station struct {
 }
 
 // Init will initialize the location
-func (s *Station) Init() (err error) {
-	s.loc, err = time.LoadLocation(s.Location)
-	return
+func (s *Station) Init() error {
+	loc, err := time.LoadLocation(s.Location)
+	if err != nil {
+		return errors.New(fmt.Sprintf("unknown location %q", s.Location))
+	}
+	s.loc = loc
+	return nil
 }
 
 // Tune into the station, and return a stream, or error

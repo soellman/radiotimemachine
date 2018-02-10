@@ -72,7 +72,7 @@ func (r *Radio) StartRecording(s *Station) {
 		tape := r.TapeDeck.BlankTape(s.Name, s.CurrentTime())
 
 		size := stream.Chunksize()
-		level.Info(logger).Log(
+		level.Debug(logger).Log(
 			"msg", fmt.Sprintf("Recording station with chunksize %d", size),
 			"station", s.Name)
 		// r.LogStatus(s.Name, Status{state: StatusRunning})
@@ -122,7 +122,7 @@ func (r *Radio) On() {
 	r.wg.Add(1)
 
 	if r.Options.Record {
-		level.Info(logger).Log("msg", "Starting recording presets")
+		level.Info(logger).Log("msg", "Starting to record presets")
 
 		stations, err := r.Presets.Load()
 		if err != nil {
@@ -166,6 +166,7 @@ func (r *Radio) On() {
 	))
 
 	go r.Server.ListenAndServe()
+	level.Info(logger).Log("msg", "Time machine is operational")
 }
 
 func (r *Radio) Off() {
@@ -268,7 +269,6 @@ func (r *Radio) Stream(t *RecordedTape, rw http.ResponseWriter) error {
 				"err", err)
 			return errStreamWriteError
 		}
-		rw.(http.Flusher).Flush()
 		return nil
 	}
 
@@ -293,10 +293,4 @@ func (r *Radio) Stream(t *RecordedTape, rw http.ResponseWriter) error {
 			}
 		}
 	}
-}
-
-type Backend interface {
-	Init(host string, port int) error
-	PresetBackend
-	TapeBackend
 }
