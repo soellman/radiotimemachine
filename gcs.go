@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 
 	"cloud.google.com/go/storage"
 	"golang.org/x/net/context"
@@ -66,26 +67,23 @@ type GCSTape struct {
 func (t *GCSTape) Write(data []byte) error {
 	name := fmt.Sprintf("%s/%s.chunk", t.name, t.i.Key())
 	w := t.handle.Object(name).NewWriter(t.ctx)
+	defer w.Close()
+
 	if _, err := w.Write(data); err != nil {
-		fmt.Printf("err? %v\n", err)
 		return err
 	}
 
-	w.Close()
 	return nil
 }
 
 func (t *GCSTape) Read() ([]byte, error) {
 	name := fmt.Sprintf("%s/%s.chunk", t.name, t.i.Key())
+
 	r, err := t.handle.Object(name).NewReader(t.ctx)
 	if err != nil {
 		return []byte{}, err
 	}
+	defer r.Close()
 
-	var b []byte
-	if _, err := r.Read(b); err != nil {
-		return b, err
-	}
-
-	return b, nil
+	return ioutil.ReadAll(r)
 }
