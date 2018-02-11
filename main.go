@@ -104,6 +104,9 @@ func configure() *Radio {
 				"err", err)
 			os.Exit(1)
 		}
+		level.Info(logger).Log(
+			"msg", "Storage backend initialized",
+			"driver", "gcs")
 		storageBackend = gcs
 	}
 
