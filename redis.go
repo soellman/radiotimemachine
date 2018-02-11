@@ -5,19 +5,22 @@ import (
 	"time"
 
 	"github.com/go-redis/redis"
+	"golang.org/x/net/context"
 )
 
 // A RedisBackend implements Backend and connects to redis
 // with a 24h expiration on stored entries
 type RedisBackend struct {
 	ssdb   bool
+	host   string
+	port   int
 	client *redis.Client
 }
 
 // Implements Backend
-func (b *RedisBackend) Init(host string, port int) error {
+func (b *RedisBackend) Init() error {
 	b.client = redis.NewClient(&redis.Options{
-		Addr:     fmt.Sprintf("%s:%d", host, port),
+		Addr:     fmt.Sprintf("%s:%d", b.host, b.port),
 		Password: "", // no password set
 		DB:       0,  // use default DB
 	})
@@ -26,18 +29,18 @@ func (b *RedisBackend) Init(host string, port int) error {
 }
 
 // Implements RecordedTape
-func (b RedisBackend) RecordedTape(name string, i Incrementer) *RecordedTape {
+func (b RedisBackend) RecordedTape(ctx context.Context, name string, i Incrementer) (*RecordedTape, error) {
 	return &RecordedTape{
 		tape: &RedisTape{
 			name:   name,
 			i:      i,
 			client: b.client,
 		},
-	}
+	}, nil
 }
 
 // Implements BlankTape
-func (b RedisBackend) BlankTape(name string, i Incrementer) *BlankTape {
+func (b RedisBackend) BlankTape(ctx context.Context, name string, i Incrementer) (*BlankTape, error) {
 	return &BlankTape{
 		tape: &RedisTape{
 			ssdb:   b.ssdb,
@@ -45,7 +48,7 @@ func (b RedisBackend) BlankTape(name string, i Incrementer) *BlankTape {
 			i:      i,
 			client: b.client,
 		},
-	}
+	}, nil
 }
 
 // A RedisTape implements BlankTape and RecordedTape

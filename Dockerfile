@@ -1,5 +1,5 @@
 FROM alpine
-RUN apk add -U tzdata
+RUN apk add -U ca-certificates tzdata
 
 COPY radiotimemachine-linux /radiotimemachine
 

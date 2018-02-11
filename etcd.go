@@ -10,12 +10,14 @@ import (
 // A EtcdBackend implements Backend and connects to etcd
 // with a 24h expiration on stored entries
 type EtcdBackend struct {
+	host   string
+	port   int
 	client client.Client
 }
 
 // Implements Backend
-func (b *EtcdBackend) Init(host string, port int) error {
-	ep := fmt.Sprintf("http://%s:%d", host, port)
+func (b *EtcdBackend) Init() error {
+	ep := fmt.Sprintf("http://%s:%d", b.host, b.port)
 	cfg := client.Config{
 		Endpoints: []string{ep},
 		Transport: client.DefaultTransport,
@@ -29,25 +31,25 @@ func (b *EtcdBackend) Init(host string, port int) error {
 }
 
 // Implements RecordedTape
-func (b *EtcdBackend) RecordedTape(name string, i Incrementer) *RecordedTape {
+func (b *EtcdBackend) RecordedTape(ctx context.Context, name string, i Incrementer) (*RecordedTape, error) {
 	return &RecordedTape{
 		tape: &EtcdTape{
 			name:   name,
 			i:      i,
 			client: b.client,
 		},
-	}
+	}, nil
 }
 
 // Implements BlankTape
-func (b *EtcdBackend) BlankTape(name string, i Incrementer) *BlankTape {
+func (b *EtcdBackend) BlankTape(ctx context.Context, name string, i Incrementer) (*BlankTape, error) {
 	return &BlankTape{
 		tape: &EtcdTape{
 			name:   name,
 			i:      i,
 			client: b.client,
 		},
-	}
+	}, nil
 }
 
 // A EtcdTape implements BlankTape and RecordedTape

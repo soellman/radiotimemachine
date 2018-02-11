@@ -15,6 +15,8 @@ import (
 const (
 	ChunkSeconds = 20
 	BufferChunks = 2
+
+	BucketName = "radiotimemachine"
 )
 
 var (
@@ -25,18 +27,20 @@ var (
 func configure() *Radio {
 	// Parse flags
 	var (
-		driver    string
-		dbhost    string
-		dbport    int
-		record    bool
-		broadcast bool
-		addr      string
-		loglevel  string
+		driver        string
+		dbhost        string
+		dbport        int
+		storagedriver string
+		record        bool
+		broadcast     bool
+		addr          string
+		loglevel      string
 	)
 
 	flag.StringVar(&driver, "driver", "redis", "Database driver: etcd|redis|ssdb")
 	flag.StringVar(&dbhost, "dbhost", "localhost", "Database host")
 	flag.IntVar(&dbport, "dbport", 6379, "Database port")
+	flag.StringVar(&storagedriver, "storagedriver", "", "Override storage driver: gcb")
 	flag.BoolVar(&record, "record", true, "Record presets")
 	flag.BoolVar(&broadcast, "broadcast", true, "Broadcast to users")
 	flag.StringVar(&addr, "addr", ":8080", "Broadcast address")
@@ -68,17 +72,17 @@ func configure() *Radio {
 	var backend Backend
 	switch driver {
 	case "etcd":
-		backend = &EtcdBackend{}
+		backend = &EtcdBackend{host: dbhost, port: dbport}
 	case "redis":
-		backend = &RedisBackend{}
+		backend = &RedisBackend{host: dbhost, port: dbport}
 	case "ssdb":
-		backend = &RedisBackend{ssdb: true}
+		backend = &RedisBackend{ssdb: true, host: dbhost, port: dbport}
 	default:
 		level.Error(logger).Log("msg", fmt.Sprintf("No %q driver found", driver))
 		os.Exit(1)
 	}
 
-	if err := backend.Init(dbhost, dbport); err != nil {
+	if err := backend.Init(); err != nil {
 		level.Error(logger).Log(
 			"msg", fmt.Sprintf("Cannot init backend with driver %s", driver),
 			"err", err)
@@ -89,11 +93,25 @@ func configure() *Radio {
 		"driver", driver,
 		"dbaddr", fmt.Sprintf("%s:%d", dbhost, dbport))
 
+	// Use separate storage driver
+	var storageBackend Backend = backend
+	if storagedriver == "gcs" {
+		// GOOGLE_CLOUD_PROJECT env var needed if not in GCE
+		gcs := &GCSBackend{bucket: BucketName}
+		if err := gcs.Init(); err != nil {
+			level.Error(logger).Log(
+				"msg", "Cannot init GCS backend",
+				"err", err)
+			os.Exit(1)
+		}
+		storageBackend = gcs
+	}
+
 	// Construct the radio
 	return &Radio{
 		Server: &http.Server{Addr: addr},
 		TapeDeck: &TapeDeck{
-			backend: backend.(TapeBackend),
+			backend: storageBackend.(TapeBackend),
 		},
 		Presets: &Presets{
 			backend: backend.(PresetBackend),

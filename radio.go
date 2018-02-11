@@ -67,9 +67,14 @@ func (r *Radio) StartRecording(s *Station) {
 			return err
 		}
 
-		// should this maybe throw an error?
-		// if so, set status to error
-		tape := r.TapeDeck.BlankTape(s.Name, s.CurrentTime())
+		tape, err := r.TapeDeck.BlankTape(ctx, s.Name, s.CurrentTime())
+		if err != nil {
+			level.Warn(logger).Log(
+				"msg", "error loading blank tape",
+				"err", err)
+			// r.LogStatus(s.Name, Status{state: StatusErr, err: err})
+			return err
+		}
 
 		size := stream.Chunksize()
 		level.Debug(logger).Log(
@@ -205,7 +210,17 @@ func (r *Radio) Broadcast(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	listenerTime := s.ListenerTime(sp.listenerLocation)
-	tape := r.TapeDeck.RecordedTape(s.Name, listenerTime)
+	tape, err := r.TapeDeck.RecordedTape(req.Context(), s.Name, listenerTime)
+	if err != nil {
+		level.Warn(logger).Log(
+			"msg", "error loading recorded tape",
+			"station", sp.stationName,
+			"client", req.RemoteAddr,
+			"err", err)
+
+		http.Error(rw, "internal server error", http.StatusInternalServerError)
+		return
+	}
 
 	level.Debug(logger).Log(
 		"msg", "Broadcasting station",

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis"
+	"golang.org/x/net/context"
 )
 
 var (
@@ -17,7 +18,9 @@ var (
 )
 
 func TestRedis(t *testing.T) {
-	if err := b.Init("localhost", 9); err == nil {
+	b.host = "localhost"
+	b.port = 9
+	if err := b.Init(); err == nil {
 		t.Fatalf("there is a ghost redis on tcp port 9")
 	}
 
@@ -38,7 +41,9 @@ func TestRedis(t *testing.T) {
 		t.Fatalf("unable to get miniredis port")
 	}
 
-	if b.Init(parts[0], port); err != nil {
+	b.host = parts[0]
+	b.port = port
+	if b.Init(); err != nil {
 		t.Fatalf("miniredis can't ping: %v", err)
 	}
 
@@ -78,12 +83,12 @@ func testRedisPresets(t *testing.T) {
 
 func testRedisTapes(t *testing.T) {
 	cue := time.Now()
-	blank := b.BlankTape(name, Incrementer{cue})
+	blank, err := b.BlankTape(context.Background(), name, Incrementer{cue})
 	if _, err := blank.Write(data); err != nil {
 		t.Fatalf("miniredis failed")
 	}
 
-	tape := b.RecordedTape(name, Incrementer{cue})
+	tape, err := b.RecordedTape(context.Background(), name, Incrementer{cue})
 	d, err := tape.tape.Read()
 	if err != nil {
 		t.Fatalf("miniredis failed")

@@ -1,6 +1,10 @@
 package main
 
-import "time"
+import (
+	"time"
+
+	"golang.org/x/net/context"
+)
 
 const TTL = time.Duration(24 * time.Hour)
 
@@ -9,12 +13,12 @@ type TapeDeck struct {
 	backend TapeBackend
 }
 
-func (deck *TapeDeck) BlankTape(name string, cue time.Time) *BlankTape {
-	return deck.backend.BlankTape(name, Incrementer{cue})
+func (deck *TapeDeck) BlankTape(ctx context.Context, name string, cue time.Time) (*BlankTape, error) {
+	return deck.backend.BlankTape(ctx, name, Incrementer{cue})
 }
 
-func (deck *TapeDeck) RecordedTape(name string, cue time.Time) *RecordedTape {
-	return deck.backend.RecordedTape(name, Incrementer{cue})
+func (deck *TapeDeck) RecordedTape(ctx context.Context, name string, cue time.Time) (*RecordedTape, error) {
+	return deck.backend.RecordedTape(ctx, name, Incrementer{cue})
 }
 
 // Incrementer increments time
@@ -31,8 +35,8 @@ func (i *Incrementer) Key() string {
 }
 
 type TapeBackend interface {
-	BlankTape(name string, i Incrementer) *BlankTape
-	RecordedTape(name string, i Incrementer) *RecordedTape
+	BlankTape(ctx context.Context, name string, i Incrementer) (*BlankTape, error)
+	RecordedTape(ctx context.Context, name string, i Incrementer) (*RecordedTape, error)
 }
 
 // A RecordedTape plays chunks from the datastore via the Reader interface

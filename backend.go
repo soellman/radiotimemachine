@@ -4,7 +4,7 @@ type Backend interface {
 	Initable
 }
 
-// TODO: Init shouldn't take params, params should be fed in at creation time
+// Init will test the validity of the backend configuration
 type Initable interface {
-	Init(host string, port int) error
+	Init() error
 }
