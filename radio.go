@@ -137,6 +137,7 @@ func (r *Radio) On() {
 		}
 
 		for _, s := range stations {
+			s := s
 			err = s.Init()
 			if err != nil {
 				level.Warn(logger).Log(
