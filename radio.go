@@ -63,7 +63,6 @@ func (r *Radio) StartRecording(s *Station) {
 				"msg", "error tuning into station",
 				"station", s.Name,
 				"err", err)
-			// r.LogStatus(s.Name, Status{state: StatusErr, err: err})
 			return err
 		}
 
@@ -72,7 +71,6 @@ func (r *Radio) StartRecording(s *Station) {
 			level.Warn(logger).Log(
 				"msg", "error loading blank tape",
 				"err", err)
-			// r.LogStatus(s.Name, Status{state: StatusErr, err: err})
 			return err
 		}
 
@@ -80,7 +78,6 @@ func (r *Radio) StartRecording(s *Station) {
 		level.Debug(logger).Log(
 			"msg", fmt.Sprintf("Recording station with chunksize %d", size),
 			"station", s.Name)
-		// r.LogStatus(s.Name, Status{state: StatusRunning})
 
 		if err := ChunkPipe(size, stream, tape); err != nil {
 			if strings.HasSuffix(err.Error(), "context canceled") {
@@ -92,9 +89,9 @@ func (r *Radio) StartRecording(s *Station) {
 
 			level.Warn(logger).Log(
 				"msg", "error in chunkpipe",
+				"station", s.Name,
 				"err", err)
-			// r.LogStatus(s.Name, Status{state: StatusErr})
-			return err
+			return nil
 		}
 
 		level.Debug(logger).Log(
