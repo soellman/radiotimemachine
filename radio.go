@@ -91,13 +91,15 @@ func (r *Radio) StartRecording(s *Station) {
 				"msg", "error in chunkpipe",
 				"station", s.Name,
 				"err", err)
-			return nil
+			return err
 		}
 
 		level.Debug(logger).Log(
 			"msg", "chunkpipe returned",
 			"station", s.Name)
-		return nil
+		// ChunkPipe encountered an EOF but we should still retry
+		return errors.New("ChunkPipe returned io.EOF")
+
 	}
 
 	b := backoff.NewExponentialBackOff()
