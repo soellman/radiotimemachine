@@ -87,6 +87,13 @@ func (r *Radio) StartRecording(s *Station) {
 				return nil
 			}
 
+			if strings.HasSuffix(err.Error(), "unexpected EOF") {
+				level.Debug(logger).Log(
+					"msg", "stream disconnected",
+					"station", s.Name)
+				return nil
+			}
+
 			level.Warn(logger).Log(
 				"msg", "error in chunkpipe",
 				"station", s.Name,
