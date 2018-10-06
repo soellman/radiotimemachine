@@ -50,13 +50,17 @@ func (r *Radio) StartRecording(s *Station) {
 	}()
 
 	rec := func() error {
+		level.Debug(logger).Log(
+			"msg", "Initiating recording",
+			"station", s.Name)
+
 		stream, err := s.Tune(ctx)
 		if err != nil {
 			if strings.HasSuffix(err.Error(), "context canceled") {
 				level.Debug(logger).Log(
 					"msg", "canceled stream",
 					"station", s.Name)
-				return nil
+				return nil // Don't retry
 			}
 
 			level.Warn(logger).Log(
@@ -84,14 +88,17 @@ func (r *Radio) StartRecording(s *Station) {
 				level.Debug(logger).Log(
 					"msg", "canceled stream",
 					"station", s.Name)
-				return nil
+				return nil // Don't retry
 			}
 
-			if strings.HasSuffix(err.Error(), "unexpected EOF") {
+			if strings.HasSuffix(err.Error(), "unexpected EOF") ||
+				strings.HasSuffix(err.Error(), "read: connection reset by peer") {
+
 				level.Debug(logger).Log(
 					"msg", "stream disconnected",
+					"err", err,
 					"station", s.Name)
-				return nil
+				return err
 			}
 
 			level.Warn(logger).Log(
@@ -104,9 +111,7 @@ func (r *Radio) StartRecording(s *Station) {
 		level.Debug(logger).Log(
 			"msg", "chunkpipe returned",
 			"station", s.Name)
-		// ChunkPipe encountered an EOF but we should still retry
 		return errors.New("ChunkPipe returned io.EOF")
-
 	}
 
 	b := backoff.NewExponentialBackOff()
@@ -119,6 +124,10 @@ func (r *Radio) StartRecording(s *Station) {
 			"msg", "error after retrying",
 			"err", err)
 	}
+
+	level.Debug(logger).Log(
+		"msg", "Finished recording",
+		"station", s.Name)
 }
 
 // Turn on the radio and start recording presets
