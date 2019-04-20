@@ -37,10 +37,10 @@ func configure() *Radio {
 		loglevel      string
 	)
 
-	flag.StringVar(&driver, "driver", "redis", "Database driver: etcd|redis|ssdb")
+	flag.StringVar(&driver, "driver", "redis", "Database driver: etcd|redis|ssdb|datastore")
 	flag.StringVar(&dbhost, "dbhost", "localhost", "Database host")
 	flag.IntVar(&dbport, "dbport", 6379, "Database port")
-	flag.StringVar(&storagedriver, "storagedriver", "", "Override storage driver: gcb")
+	flag.StringVar(&storagedriver, "storagedriver", "", "Override storage driver: gcs")
 	flag.BoolVar(&record, "record", true, "Record presets")
 	flag.BoolVar(&broadcast, "broadcast", true, "Broadcast to users")
 	flag.StringVar(&addr, "addr", ":8080", "Broadcast address")
@@ -77,6 +77,8 @@ func configure() *Radio {
 		backend = &RedisBackend{host: dbhost, port: dbport}
 	case "ssdb":
 		backend = &RedisBackend{ssdb: true, host: dbhost, port: dbport}
+	case "datastore":
+		backend = &DatastoreBackend{}
 	default:
 		level.Error(logger).Log("msg", fmt.Sprintf("No %q driver found", driver))
 		os.Exit(1)
