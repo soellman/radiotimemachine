@@ -3,7 +3,7 @@ package main
 import (
 	"time"
 
-	"golang.org/x/net/context"
+	"context"
 )
 
 const TTL = time.Duration(24 * time.Hour)

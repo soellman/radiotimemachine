@@ -4,10 +4,11 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"context"
+
 	"github.com/go-kit/kit/endpoint"
 	httptransport "github.com/go-kit/kit/transport/http"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 type Presets struct {

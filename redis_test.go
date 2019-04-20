@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"context"
+
 	"github.com/alicebob/miniredis"
-	"golang.org/x/net/context"
 )
 
 var (

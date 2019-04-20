@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/cenkalti/backoff"
 	"github.com/go-kit/kit/log/level"

@@ -3,8 +3,9 @@ package main
 import (
 	"fmt"
 
+	"context"
+
 	"github.com/coreos/etcd/client"
-	"golang.org/x/net/context"
 )
 
 // A EtcdBackend implements Backend and connects to etcd

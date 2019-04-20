@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"time"
 
+	"context"
+
 	"github.com/go-redis/redis"
-	"golang.org/x/net/context"
 )
 
 // A RedisBackend implements Backend and connects to redis

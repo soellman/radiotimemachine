@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/pkg/errors"
 )

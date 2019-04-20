@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"io/ioutil"
 
+	"context"
+
 	"cloud.google.com/go/storage"
-	"golang.org/x/net/context"
 )
 
 // A GCSBackend implements Backend and connects to google cloud storage
