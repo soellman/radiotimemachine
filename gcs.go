@@ -49,6 +49,7 @@ func (b GCSBackend) BlankTape(ctx context.Context, name string, i Incrementer) (
 
 	return &BlankTape{
 		tape: &GCSTape{
+			ctx:    ctx,
 			handle: handle,
 			name:   name,
 			i:      i,
