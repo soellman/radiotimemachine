@@ -15,8 +15,6 @@ import (
 const (
 	ChunkSeconds = 20
 	BufferChunks = 2
-
-	BucketName = "radiotimemachine"
 )
 
 var (
@@ -31,6 +29,7 @@ func configure() *Radio {
 		dbhost        string
 		dbport        int
 		storagedriver string
+		bucketname    string
 		record        bool
 		broadcast     bool
 		addr          string
@@ -41,6 +40,7 @@ func configure() *Radio {
 	flag.StringVar(&dbhost, "dbhost", "localhost", "Database host")
 	flag.IntVar(&dbport, "dbport", 6379, "Database port")
 	flag.StringVar(&storagedriver, "storagedriver", "", "Override storage driver: gcs")
+	flag.StringVar(&bucketname, "bucketname", "radiotimemachine", "gcs storage bucket")
 	flag.BoolVar(&record, "record", true, "Record presets")
 	flag.BoolVar(&broadcast, "broadcast", true, "Broadcast to users")
 	flag.StringVar(&addr, "addr", ":8080", "Broadcast address")
@@ -99,7 +99,7 @@ func configure() *Radio {
 	var storageBackend Backend = backend
 	if storagedriver == "gcs" {
 		// GOOGLE_CLOUD_PROJECT env var needed if not in GCE
-		gcs := &GCSBackend{bucket: BucketName}
+		gcs := &GCSBackend{bucket: bucketname}
 		if err := gcs.Init(); err != nil {
 			level.Error(logger).Log(
 				"msg", "Cannot init GCS backend",
