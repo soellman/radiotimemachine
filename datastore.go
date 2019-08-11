@@ -34,6 +34,7 @@ func (b DatastoreBackend) ReadPreset(name string) (data []byte, err error) {
 	if err != nil {
 		return
 	}
+	data = make([]byte, len(p.Value))
 	copy(data, p.Value)
 	return
 }
